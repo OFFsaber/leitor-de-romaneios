@@ -5,15 +5,22 @@ import { resolve } from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/leitor-de-romaneios/',
+  base: './',
   optimizeDeps: {
     include: ['pdfjs-dist/legacy/build/pdf']
   },
   server: {
     port: 5173,
+    host: true,
+    strictPort: true,
     fs: {
       allow: ['..']
     }
+  },
+  preview: {
+    port: 5173,
+    host: true,
+    strictPort: true
   },
   build: {
     rollupOptions: {

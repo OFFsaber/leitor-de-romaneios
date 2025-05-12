@@ -43,71 +43,63 @@ const ConferenciaPage = () => {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const textosPagina = textContent.items.map((item: any) => item.str);
-        todoTexto += textosPagina.join(' ') + '\n';
+        todoTexto += textosPagina.join(' ');
       }
 
       console.log('Texto extraído do PDF:', todoTexto);
-      const linhas = todoTexto.split('\n');
       
       // Objeto para agrupar produtos
       const produtosMap = new Map<string, Produto>();
-      
-      let produtoAtual: string | null = null;
-      let pesoTotal: string | null = null;
 
-      linhas.forEach((linha) => {
-        // Procura pelo cabeçalho do produto (ex: 00063 - JUMBO STRONG BRANCO II KG 752,000)
-        const cabecalhoMatch = linha.match(/(\d{5}\s*-\s*[^KG]+)KG\s*(\d+[,.]?\d*)/);
-        
-        // Procura por linhas que começam com GRAMATURA
-        const gramaturaMatch = linha.match(/^GRAMATURA:\s*(\d+)\s*\/\s*FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})/);
-        
-        // Procura por linhas que começam com FORMATO
-        const formatoMatch = linha.match(/^FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})\s+GRAMATURA:\s*(\d+)/);
+      // Procurar os totais primeiro
+      const totalStrongMatch = todoTexto.match(/TOTAL\s*STRONG\s*BRANCO[^0-9]*(\d+(?:,\d+)?)/i);
+      const totalKraftMatch = todoTexto.match(/TOTAL\s*KRAFT\s*MIX[^0-9]*(\d+(?:,\d+)?)/i);
 
-        if (cabecalhoMatch) {
-          produtoAtual = cabecalhoMatch[1].trim();
-          pesoTotal = cabecalhoMatch[2];
-          if (!produtosMap.has(produtoAtual)) {
-            produtosMap.set(produtoAtual, {
-              codigo: '',
-              nome: produtoAtual,
-              pesoTotal: pesoTotal,
-              lotes: []
-            });
-          }
+      if (totalStrongMatch) {
+        produtosMap.set("JUMBO STRONG BRANCO II", {
+          codigo: '00063',
+          nome: "JUMBO STRONG BRANCO II",
+          pesoTotal: totalStrongMatch[1],
+          lotes: []
+        });
+      }
+
+      if (totalKraftMatch) {
+        produtosMap.set("KRAFT MIX", {
+          codigo: '00237',
+          nome: "KRAFT MIX",
+          pesoTotal: totalKraftMatch[1],
+          lotes: []
+        });
+      }
+
+      // Encontrar todos os lotes usando uma expressão regular mais precisa
+      const lotesRegex = /GRAMATURA:\s*(\d+)\s*\/\s*FORMATO:\s*(\d+)\s+(\d+(?:,\d+)?)\s+(\d{15})/g;
+      let match;
+
+      while ((match = lotesRegex.exec(todoTexto)) !== null) {
+        const [, gramatura, formato, peso, lote] = match;
+        console.log('Lote encontrado:', { gramatura, formato, peso, lote });
+
+        // Adicionar ao produto correspondente
+        for (const [nomeProduto, produto] of produtosMap.entries()) {
+          produto.lotes.push({
+            gramatura,
+            formato,
+            peso,
+            lote,
+            conferido: false
+          });
         }
-
-        // Adiciona lote tanto para linhas que começam com GRAMATURA quanto FORMATO
-        if (produtoAtual) {
-          const produto = produtosMap.get(produtoAtual);
-          if (produto) {
-            if (gramaturaMatch) {
-              produto.lotes.push({
-                gramatura: gramaturaMatch[1],
-                formato: gramaturaMatch[2],
-                peso: gramaturaMatch[3],
-                lote: gramaturaMatch[4],
-                conferido: false
-              });
-            } else if (formatoMatch) {
-              produto.lotes.push({
-                formato: formatoMatch[1],
-                peso: formatoMatch[2],
-                lote: formatoMatch[3],
-                gramatura: formatoMatch[4],
-                conferido: false
-              });
-            }
-          }
-        }
-      });
+      }
 
       if (produtosMap.size === 0) {
         throw new Error('Nenhum produto encontrado no PDF. Verifique o formato do arquivo.');
       }
 
-      setProdutos(Array.from(produtosMap.values()));
+      const produtos = Array.from(produtosMap.values());
+      console.log('Produtos processados:', produtos);
+      setProdutos(produtos);
       setRomaneioCarregado(true);
       setError(null);
     } catch (err) {
@@ -148,38 +140,28 @@ const ConferenciaPage = () => {
       );
 
       scanner.render((decodedText) => {
-        // Procurar o produto na lista pelo código de barras (que deve ser o lote)
-        const produto = produtos.find(p => p.lotes.some(l => l.lote === decodedText));
-        
-        if (produto) {
-          setProdutos(prev => 
-            prev.map(p => 
-              p.lotes.find(l => l.lote === decodedText)
-                ? { ...p, lotes: p.lotes.map(l => l.lote === decodedText ? { ...l, conferido: true } : l) }
-                : p
+        console.log('Código escaneado:', decodedText);
+        // Atualizar o status do lote escaneado
+        setProdutos(prevProdutos => 
+          prevProdutos.map(produto => ({
+            ...produto,
+            lotes: produto.lotes.map(lote => 
+              lote.lote === decodedText 
+                ? { ...lote, conferido: true }
+                : lote
             )
-          );
-        } else {
-          setProdutosNaoListados(prev => [
-            ...prev,
-            {
-              gramatura: '',
-              formato: '',
-              peso: '',
-              lote: decodedText,
-              conferido: true
-            }
-          ]);
-        }
+          }))
+        );
       }, (error) => {
         // Ignorar erros de leitura
+        console.log('Erro de leitura ignorado:', error);
       });
 
       return () => {
         scanner.clear();
       };
     }
-  }, [romaneioCarregado, produtos]);
+  }, [romaneioCarregado]);
 
   return (
     <Container maxWidth="lg">
@@ -209,24 +191,19 @@ const ConferenciaPage = () => {
 
         {romaneioCarregado && (
           <>
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h6" gutterBottom>
-                Scanner de Código de Barras
-              </Typography>
-              <div id="reader" style={{ width: '100%', maxWidth: '640px', margin: '0 auto' }}></div>
-            </Box>
-
+            <Box id="reader" sx={{ mb: 4 }}></Box>
+            
             {produtos.map((produto) => (
-              <Paper key={produto.nome} sx={{ p: 2, mb: 2 }}>
-                <Typography variant="h6" gutterBottom>
+              <Box key={produto.codigo} sx={{ mb: 4 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
                   {produto.nome}
+                  <Typography component="span" color="primary" sx={{ ml: 2 }}>
+                    Peso Total: {produto.pesoTotal} KG
+                  </Typography>
                 </Typography>
-                <Typography variant="subtitle1" gutterBottom color="primary">
-                  Peso Total: {produto.pesoTotal} KG
-                </Typography>
-                
-                <TableContainer>
-                  <Table size="small">
+
+                <TableContainer component={Paper}>
+                  <Table>
                     <TableHead>
                       <TableRow>
                         <TableCell>Gramatura</TableCell>
@@ -237,11 +214,11 @@ const ConferenciaPage = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {produto.lotes.map((lote) => (
+                      {produto.lotes.map((lote, index) => (
                         <TableRow 
-                          key={lote.lote}
-                          sx={{
-                            backgroundColor: lote.conferido ? 'success.light' : 'inherit'
+                          key={index}
+                          sx={{ 
+                            backgroundColor: lote.conferido ? '#e8f5e9' : 'inherit'
                           }}
                         >
                           <TableCell>{lote.gramatura}</TableCell>
@@ -256,63 +233,36 @@ const ConferenciaPage = () => {
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </Paper>
+              </Box>
             ))}
 
-            {produtosNaoListados.length > 0 && (
-              <Paper sx={{ p: 2, mb: 2 }}>
-                <Typography variant="h6" gutterBottom color="error">
-                  Produtos Não Listados
-                </Typography>
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Lote</TableCell>
-                        <TableCell>Status</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {produtosNaoListados.map((produto) => (
-                        <TableRow key={produto.lote}>
-                          <TableCell>{produto.lote}</TableCell>
-                          <TableCell sx={{ color: 'error.main' }}>
-                            Não encontrado no romaneio
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            )}
-
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-              <Button
-                variant="outlined"
+            <Box sx={{ mt: 4, display: 'flex', gap: 2, justifyContent: 'center' }}>
+              <Button 
+                variant="outlined" 
+                color="secondary" 
                 onClick={() => {
                   setProdutos([]);
                   setProdutosNaoListados([]);
                   setRomaneioCarregado(false);
                 }}
               >
-                Cancelar Conferência
+                CANCELAR CONFERÊNCIA
               </Button>
-              <Button
-                variant="contained"
-                color="success"
-                onClick={() => {
-                  localStorage.setItem('resultadoConferencia', JSON.stringify({
-                    produtos,
-                    produtosNaoListados
-                  }));
-                  navigate('/resultados');
-                }}
+              <Button 
+                variant="contained" 
+                color="primary" 
+                onClick={() => navigate('/resultados')}
               >
-                Finalizar Conferência
+                FINALIZAR CONFERÊNCIA
               </Button>
             </Box>
           </>
+        )}
+
+        {error && (
+          <Typography color="error" sx={{ mt: 2 }}>
+            {error}
+          </Typography>
         )}
       </Box>
     </Container>
