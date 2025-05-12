@@ -37,7 +37,10 @@ export default defineConfig({
         manualChunks: {
           pdfjs: ['pdfjs-dist'],
           vendor: ['react', 'react-dom', 'react-router-dom', '@mui/material']
-        }
+        },
+        entryFileNames: `assets/[name].js`,
+        chunkFileNames: `assets/[name].js`,
+        assetFileNames: `assets/[name].[ext]`
       }
     },
     chunkSizeWarningLimit: 2000
