@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://offsaber.github.io/leitor-de-romaneios",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,13 +14,14 @@
   "dependencies": {
     "@emotion/react": "^11.11.0",
     "@emotion/styled": "^11.11.0",
-    "@mui/material": "^5.13.0",
     "@mui/icons-material": "^5.11.16",
+    "@mui/material": "^5.13.0",
+    "html5-qrcode": "^2.3.8",
+    "jspdf": "^2.5.2",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.11.1",
-    "pdfjs-dist": "^3.11.174",
-    "html5-qrcode": "^2.3.8"
+    "react-router-dom": "^6.11.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.6",

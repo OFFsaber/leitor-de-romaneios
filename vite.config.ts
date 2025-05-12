@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: '/leitor-de-romaneios/',
   optimizeDeps: {
     include: ['pdfjs-dist/legacy/build/pdf']
   },
@@ -29,9 +29,14 @@ export default defineConfig({
       input: {
         main: 'index.html'
       },
+      external: ['jspdf'],
       output: {
+        globals: {
+          jspdf: 'jspdf'
+        },
         manualChunks: {
-          pdfjs: ['pdfjs-dist']
+          pdfjs: ['pdfjs-dist'],
+          vendor: ['react', 'react-dom', 'react-router-dom', '@mui/material']
         }
       }
     },

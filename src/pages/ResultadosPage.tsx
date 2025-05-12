@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { jsPDF } from 'jspdf';
+import jsPDF from 'jspdf';
 
 interface Produto {
   codigo: string;
