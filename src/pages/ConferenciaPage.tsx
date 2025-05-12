@@ -1,26 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
+import { Box, Button, Container, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress } from '@mui/material';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.entry';
 
 // Configuração do worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
+interface ProdutoLote {
+  gramatura: string;
+  formato: string;
+  peso: string;
+  lote: string;
+  conferido: boolean;
+}
+
 interface Produto {
   codigo: string;
   nome: string;
-  conferido: boolean;
-  formato: string;
-  gramatura: string;
-  peso: string;
-  lote: string;
+  pesoTotal: string;
+  lotes: ProdutoLote[];
 }
 
 const ConferenciaPage = () => {
   const navigate = useNavigate();
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [produtosNaoListados, setProdutosNaoListados] = useState<Produto[]>([]);
+  const [produtosNaoListados, setProdutosNaoListados] = useState<ProdutoLote[]>([]);
   const [romaneioCarregado, setRomaneioCarregado] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +40,6 @@ const ConferenciaPage = () => {
       let todoTexto = '';
       
       for (let i = 1; i <= pdf.numPages; i++) {
-        console.log(`Processando página ${i}...`);
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const textosPagina = textContent.items.map((item: any) => item.str);
@@ -42,53 +47,51 @@ const ConferenciaPage = () => {
       }
 
       console.log('Texto extraído do PDF:', todoTexto);
-
       const linhas = todoTexto.split('\n');
-      const produtosExtraidos: Produto[] = [];
+      
+      // Objeto para agrupar produtos
+      const produtosMap = new Map<string, Produto>();
+      
+      let produtoAtual: string | null = null;
+      let pesoTotal: string | null = null;
 
-      linhas.forEach((linha, index) => {
-        console.log(`Analisando linha ${index}:`, linha);
-        
-        // Regex atualizado para capturar o formato específico do romaneio
-        const formatoMatch = linha.match(/FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)/);
-        const gramaturaMatch = linha.match(/GRAMATURA:\s*(\d+)/);
-        const loteMatch = linha.match(/(\d{15})/);
-        const totalMatch = linha.match(/TOTAL\s+([A-Z\s]+)\s+(\d+[,.]?\d*)/);
-
-        if (totalMatch) {
-          const produto = {
-            codigo: '',
-            nome: `${totalMatch[1]} - ${totalMatch[2]} KG`,
-            formato: '',
-            gramatura: '',
-            peso: totalMatch[2],
-            lote: '',
-            conferido: false
-          };
-          console.log('Total encontrado:', produto);
-          produtosExtraidos.push(produto);
+      linhas.forEach((linha) => {
+        // Procura pelo cabeçalho do produto (ex: 00063 - JUMBO STRONG BRANCO II KG 752,000)
+        const cabecalhoMatch = linha.match(/(\d{5}\s*-\s*[^KG]+)\s*KG\s*(\d+[,.]?\d*)/);
+        if (cabecalhoMatch) {
+          produtoAtual = cabecalhoMatch[1].trim();
+          pesoTotal = cabecalhoMatch[2];
+          if (!produtosMap.has(produtoAtual)) {
+            produtosMap.set(produtoAtual, {
+              codigo: '',
+              nome: produtoAtual,
+              pesoTotal: pesoTotal,
+              lotes: []
+            });
+          }
         }
-        else if (formatoMatch && gramaturaMatch && loteMatch) {
-          const produto = {
-            codigo: '',
-            nome: `F:${formatoMatch[1]} G:${gramaturaMatch[1]} P:${formatoMatch[2]}`,
-            formato: formatoMatch[1],
-            gramatura: gramaturaMatch[1],
-            peso: formatoMatch[2],
-            lote: loteMatch[1],
-            conferido: false
-          };
-          console.log('Produto encontrado:', produto);
-          produtosExtraidos.push(produto);
+
+        // Procura por linhas de lote
+        const loteMatch = linha.match(/FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})\s+GRAMATURA:\s*(\d+)/);
+        if (loteMatch && produtoAtual) {
+          const produto = produtosMap.get(produtoAtual);
+          if (produto) {
+            produto.lotes.push({
+              formato: loteMatch[1],
+              peso: loteMatch[2],
+              lote: loteMatch[3],
+              gramatura: loteMatch[4],
+              conferido: false
+            });
+          }
         }
       });
 
-      if (produtosExtraidos.length === 0) {
+      if (produtosMap.size === 0) {
         throw new Error('Nenhum produto encontrado no PDF. Verifique o formato do arquivo.');
       }
 
-      console.log('Total de produtos encontrados:', produtosExtraidos.length);
-      setProdutos(produtosExtraidos);
+      setProdutos(Array.from(produtosMap.values()));
       setRomaneioCarregado(true);
       setError(null);
     } catch (err) {
@@ -130,13 +133,13 @@ const ConferenciaPage = () => {
 
       scanner.render((decodedText) => {
         // Procurar o produto na lista pelo código de barras (que deve ser o lote)
-        const produto = produtos.find(p => p.lote === decodedText);
+        const produto = produtos.find(p => p.lotes.some(l => l.lote === decodedText));
         
         if (produto) {
           setProdutos(prev => 
             prev.map(p => 
-              p.lote === decodedText 
-                ? { ...p, conferido: true } 
+              p.lotes.find(l => l.lote === decodedText)
+                ? { ...p, lotes: p.lotes.map(l => l.lote === decodedText ? { ...l, conferido: true } : l) }
                 : p
             )
           );
@@ -144,10 +147,8 @@ const ConferenciaPage = () => {
           setProdutosNaoListados(prev => [
             ...prev,
             {
-              codigo: '',
-              nome: 'Produto não identificado',
-              formato: '',
               gramatura: '',
+              formato: '',
               peso: '',
               lote: decodedText,
               conferido: true
@@ -165,7 +166,7 @@ const ConferenciaPage = () => {
   }, [romaneioCarregado, produtos]);
 
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Conferência de Produtos
@@ -174,7 +175,7 @@ const ConferenciaPage = () => {
         {!romaneioCarregado && (
           <Box sx={{ textAlign: 'center', my: 4 }}>
             <Button variant="contained" component="label" disabled={loading}>
-              {loading ? 'Carregando...' : 'Carregar Romaneio'}
+              {loading ? 'Carregando...' : 'CARREGAR ROMANEIO'}
               <input type="file" hidden onChange={handleFileUpload} accept=".pdf" />
             </Button>
             {loading && (
@@ -199,60 +200,74 @@ const ConferenciaPage = () => {
               <div id="reader" style={{ width: '100%', maxWidth: '640px', margin: '0 auto' }}></div>
             </Box>
 
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Produtos do Romaneio
-              </Typography>
-              <List>
-                {produtos.filter(p => !p.nome.includes('TOTAL')).map((produto) => (
-                  <ListItem key={produto.lote || produto.nome}>
-                    <ListItemText
-                      primary={produto.nome}
-                      secondary={produto.lote ? `Lote: ${produto.lote}` : ''}
-                      sx={{
-                        color: produto.conferido ? 'success.main' : 'text.primary',
-                      }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Totais
-              </Typography>
-              <List>
-                {produtos.filter(p => p.nome.includes('TOTAL')).map((produto) => (
-                  <ListItem key={produto.nome}>
-                    <ListItemText
-                      primary={produto.nome}
-                      sx={{
-                        fontWeight: 'bold',
-                        color: 'primary.main'
-                      }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
+            {produtos.map((produto) => (
+              <Paper key={produto.nome} sx={{ p: 2, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  {produto.nome}
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom color="primary">
+                  Peso Total: {produto.pesoTotal} KG
+                </Typography>
+                
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Gramatura</TableCell>
+                        <TableCell>Formato</TableCell>
+                        <TableCell>Peso</TableCell>
+                        <TableCell>Lote</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {produto.lotes.map((lote) => (
+                        <TableRow 
+                          key={lote.lote}
+                          sx={{
+                            backgroundColor: lote.conferido ? 'success.light' : 'inherit'
+                          }}
+                        >
+                          <TableCell>{lote.gramatura}</TableCell>
+                          <TableCell>{lote.formato}</TableCell>
+                          <TableCell>{lote.peso}</TableCell>
+                          <TableCell>{lote.lote}</TableCell>
+                          <TableCell>
+                            {lote.conferido ? 'Conferido' : 'Pendente'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            ))}
 
             {produtosNaoListados.length > 0 && (
               <Paper sx={{ p: 2, mb: 2 }}>
                 <Typography variant="h6" gutterBottom color="error">
                   Produtos Não Listados
                 </Typography>
-                <List>
-                  {produtosNaoListados.map((produto) => (
-                    <ListItem key={produto.lote}>
-                      <ListItemText
-                        primary={produto.nome}
-                        secondary={`Lote: ${produto.lote}`}
-                        sx={{ color: 'error.main' }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Lote</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {produtosNaoListados.map((produto) => (
+                        <TableRow key={produto.lote}>
+                          <TableCell>{produto.lote}</TableCell>
+                          <TableCell sx={{ color: 'error.main' }}>
+                            Não encontrado no romaneio
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </Paper>
             )}
 
@@ -273,8 +288,7 @@ const ConferenciaPage = () => {
                 onClick={() => {
                   localStorage.setItem('resultadoConferencia', JSON.stringify({
                     produtos,
-                    produtosNaoListados,
-                    produtosNaoConferidos: produtos.filter(p => !p.conferido)
+                    produtosNaoListados
                   }));
                   navigate('/resultados');
                 }}
