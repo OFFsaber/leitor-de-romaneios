@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
-import * as pdfjs from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+
+// Configuração do worker do PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
 
 interface Produto {
   codigo: string;
@@ -21,40 +24,55 @@ const ConferenciaPage = () => {
 
   const processarPDF = async (arrayBuffer: ArrayBuffer) => {
     try {
-      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      console.log('Iniciando processamento do PDF...');
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      console.log('PDF carregado com sucesso. Número de páginas:', pdf.numPages);
+      
       let todoTexto = '';
       
       for (let i = 1; i <= pdf.numPages; i++) {
+        console.log(`Processando página ${i}...`);
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const textosPagina = textContent.items.map((item: any) => item.str);
         todoTexto += textosPagina.join(' ') + '\n';
       }
 
+      console.log('Texto extraído do PDF:', todoTexto);
+
       // Aqui você deve implementar a lógica para extrair os produtos do texto do PDF
-      // Este é apenas um exemplo, você precisará adaptar de acordo com o formato do seu PDF
       const linhas = todoTexto.split('\n');
       const produtosExtraidos: Produto[] = [];
 
-      linhas.forEach(linha => {
+      linhas.forEach((linha, index) => {
+        console.log(`Analisando linha ${index}:`, linha);
+        
         // Adapte este regex de acordo com o formato do seu PDF
         const match = linha.match(/([0-9]+)\s+(.+?)\s+(\d+)/);
         if (match) {
-          produtosExtraidos.push({
+          const produto = {
             codigo: match[1],
             nome: match[2],
             quantidade: parseInt(match[3]),
             conferido: false
-          });
+          };
+          console.log('Produto encontrado:', produto);
+          produtosExtraidos.push(produto);
         }
       });
 
+      if (produtosExtraidos.length === 0) {
+        throw new Error('Nenhum produto encontrado no PDF. Verifique o formato do arquivo.');
+      }
+
+      console.log('Total de produtos encontrados:', produtosExtraidos.length);
       setProdutos(produtosExtraidos);
       setRomaneioCarregado(true);
       setError(null);
     } catch (err) {
-      setError('Erro ao processar o PDF. Verifique se o arquivo está correto.');
-      console.error(err);
+      console.error('Erro ao processar PDF:', err);
+      setError('Erro ao processar o PDF. Verifique se o arquivo está correto e tente novamente.');
+      setRomaneioCarregado(false);
     }
   };
 
@@ -67,8 +85,8 @@ const ConferenciaPage = () => {
       const arrayBuffer = await file.arrayBuffer();
       await processarPDF(arrayBuffer);
     } catch (err) {
-      setError('Erro ao ler o arquivo.');
-      console.error(err);
+      console.error('Erro ao ler o arquivo:', err);
+      setError('Erro ao ler o arquivo. Verifique se é um PDF válido.');
     } finally {
       setLoading(false);
     }
