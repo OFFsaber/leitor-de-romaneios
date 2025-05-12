@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
+import * as pdfjs from 'pdfjs-dist';
 
 interface Produto {
   codigo: string;
   nome: string;
   conferido: boolean;
+  quantidade: number;
 }
 
 const ConferenciaPage = () => {
@@ -14,56 +16,104 @@ const ConferenciaPage = () => {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosNaoListados, setProdutosNaoListados] = useState<Produto[]>([]);
   const [romaneioCarregado, setRomaneioCarregado] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const processarPDF = async (arrayBuffer: ArrayBuffer) => {
+    try {
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      let todoTexto = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const textosPagina = textContent.items.map((item: any) => item.str);
+        todoTexto += textosPagina.join(' ') + '\n';
+      }
+
+      // Aqui você deve implementar a lógica para extrair os produtos do texto do PDF
+      // Este é apenas um exemplo, você precisará adaptar de acordo com o formato do seu PDF
+      const linhas = todoTexto.split('\n');
+      const produtosExtraidos: Produto[] = [];
+
+      linhas.forEach(linha => {
+        // Adapte este regex de acordo com o formato do seu PDF
+        const match = linha.match(/([0-9]+)\s+(.+?)\s+(\d+)/);
+        if (match) {
+          produtosExtraidos.push({
+            codigo: match[1],
+            nome: match[2],
+            quantidade: parseInt(match[3]),
+            conferido: false
+          });
+        }
+      });
+
+      setProdutos(produtosExtraidos);
+      setRomaneioCarregado(true);
+      setError(null);
+    } catch (err) {
+      setError('Erro ao processar o PDF. Verifique se o arquivo está correto.');
+      console.error(err);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        // Aqui você implementará a lógica para parser do seu romaneio
-        // Este é apenas um exemplo
-        const produtosDoRomaneio: Produto[] = [
-          { codigo: '123', nome: 'Produto 1', conferido: false },
-          { codigo: '456', nome: 'Produto 2', conferido: false },
-        ];
-        setProdutos(produtosDoRomaneio);
-        setRomaneioCarregado(true);
-      };
-      reader.readAsText(file);
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      await processarPDF(arrayBuffer);
+    } catch (err) {
+      setError('Erro ao ler o arquivo.');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     if (romaneioCarregado) {
-      const scanner = new Html5QrcodeScanner('reader', {
-        qrbox: {
-          width: 250,
-          height: 250,
-        },
-        fps: 5,
-      });
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+      
+      const scanner = new Html5QrcodeScanner(
+        "reader",
+        config,
+        /* verbose= */ false
+      );
 
-      scanner.render(onScanSuccess, onScanError);
-
-      function onScanSuccess(decodedText: string) {
-        const produtoEncontrado = produtos.find(p => p.codigo === decodedText);
+      scanner.render((decodedText) => {
+        // Procurar o produto na lista
+        const produto = produtos.find(p => p.codigo === decodedText);
         
-        if (produtoEncontrado) {
-          setProdutos(prev => prev.map(p => 
-            p.codigo === decodedText ? { ...p, conferido: true } : p
-          ));
+        if (produto) {
+          setProdutos(prev => 
+            prev.map(p => 
+              p.codigo === decodedText 
+                ? { ...p, conferido: true, quantidade: p.quantidade } 
+                : p
+            )
+          );
         } else {
           setProdutosNaoListados(prev => [
             ...prev,
-            { codigo: decodedText, nome: 'Produto não listado', conferido: true }
+            {
+              codigo: decodedText,
+              nome: 'Produto não identificado',
+              conferido: true,
+              quantidade: 1
+            }
           ]);
         }
-      }
-
-      function onScanError(error: any) {
-        console.warn(error);
-      }
+      }, (error) => {
+        // Ignorar erros de leitura
+      });
 
       return () => {
         scanner.clear();
@@ -71,44 +121,54 @@ const ConferenciaPage = () => {
     }
   }, [romaneioCarregado, produtos]);
 
-  const handleFinalizar = () => {
-    const resultado = {
-      produtos,
-      produtosNaoListados,
-      produtosNaoConferidos: produtos.filter(p => !p.conferido),
-    };
-    localStorage.setItem('resultadoConferencia', JSON.stringify(resultado));
-    navigate('/resultados');
-  };
-
   return (
     <Container maxWidth="md">
       <Box sx={{ py: 4 }}>
-        <Typography variant="h4" gutterBottom>
+        <Typography variant="h4" component="h1" gutterBottom>
           Conferência de Produtos
         </Typography>
 
-        {!romaneioCarregado ? (
+        {!romaneioCarregado && (
           <Box sx={{ textAlign: 'center', my: 4 }}>
-            <Button variant="contained" component="label">
-              Carregar Romaneio
-              <input type="file" hidden onChange={handleFileUpload} accept=".txt,.csv" />
+            <Button variant="contained" component="label" disabled={loading}>
+              {loading ? 'Carregando...' : 'Carregar Romaneio'}
+              <input type="file" hidden onChange={handleFileUpload} accept=".pdf" />
             </Button>
+            {loading && (
+              <Box sx={{ mt: 2 }}>
+                <CircularProgress />
+              </Box>
+            )}
+            {error && (
+              <Typography color="error" sx={{ mt: 2 }}>
+                {error}
+              </Typography>
+            )}
           </Box>
-        ) : (
+        )}
+
+        {romaneioCarregado && (
           <>
-            <div id="reader" style={{ width: '100%' }}></div>
-            
-            <Paper sx={{ mt: 4, p: 2 }}>
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" gutterBottom>
+                Scanner de Código de Barras
+              </Typography>
+              <div id="reader" style={{ width: '100%', maxWidth: '640px', margin: '0 auto' }}></div>
+            </Box>
+
+            <Paper sx={{ p: 2, mb: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Produtos do Romaneio
               </Typography>
               <List>
                 {produtos.map((produto) => (
                   <ListItem key={produto.codigo}>
-                    <ListItemText 
+                    <ListItemText
                       primary={produto.nome}
-                      sx={{ color: produto.conferido ? 'green' : 'inherit' }}
+                      secondary={`Código: ${produto.codigo} - Quantidade: ${produto.quantidade}`}
+                      sx={{
+                        color: produto.conferido ? 'success.main' : 'text.primary',
+                      }}
                     />
                   </ListItem>
                 ))}
@@ -116,16 +176,17 @@ const ConferenciaPage = () => {
             </Paper>
 
             {produtosNaoListados.length > 0 && (
-              <Paper sx={{ mt: 2, p: 2 }}>
+              <Paper sx={{ p: 2, mb: 2 }}>
                 <Typography variant="h6" gutterBottom color="error">
                   Produtos Não Listados
                 </Typography>
                 <List>
-                  {produtosNaoListados.map((produto, index) => (
-                    <ListItem key={index}>
-                      <ListItemText 
-                        primary={produto.codigo}
-                        sx={{ color: 'red' }}
+                  {produtosNaoListados.map((produto) => (
+                    <ListItem key={produto.codigo}>
+                      <ListItemText
+                        primary={produto.nome}
+                        secondary={`Código: ${produto.codigo} - Quantidade: ${produto.quantidade}`}
+                        sx={{ color: 'error.main' }}
                       />
                     </ListItem>
                   ))}
@@ -133,12 +194,29 @@ const ConferenciaPage = () => {
               </Paper>
             )}
 
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setProdutos([]);
+                  setProdutosNaoListados([]);
+                  setRomaneioCarregado(false);
+                }}
+              >
+                Cancelar Conferência
+              </Button>
               <Button
                 variant="contained"
-                color="primary"
-                onClick={handleFinalizar}
-                size="large"
+                color="success"
+                onClick={() => {
+                  // Salvar resultados no localStorage
+                  localStorage.setItem('resultadoConferencia', JSON.stringify({
+                    produtos,
+                    produtosNaoListados,
+                    produtosNaoConferidos: produtos.filter(p => !p.conferido)
+                  }));
+                  navigate('/resultados');
+                }}
               >
                 Finalizar Conferência
               </Button>
