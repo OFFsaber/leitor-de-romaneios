@@ -5,7 +5,7 @@ import { resolve } from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/leitor-de-romaneios/',
+  base: './',
   optimizeDeps: {
     include: ['pdfjs-dist/legacy/build/pdf']
   },
@@ -19,6 +19,11 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html')
+      },
+      output: {
+        manualChunks: {
+          pdfjs: ['pdfjs-dist']
+        }
       }
     }
   }

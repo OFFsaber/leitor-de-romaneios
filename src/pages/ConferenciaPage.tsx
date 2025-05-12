@@ -3,15 +3,19 @@ import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.entry';
 
 // Configuração do worker do PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.toString();
 
 interface Produto {
   codigo: string;
   nome: string;
   conferido: boolean;
-  quantidade: number;
+  formato: string;
+  gramatura: string;
+  peso: string;
+  lote: string;
 }
 
 const ConferenciaPage = () => {
@@ -40,20 +44,26 @@ const ConferenciaPage = () => {
 
       console.log('Texto extraído do PDF:', todoTexto);
 
-      // Aqui você deve implementar a lógica para extrair os produtos do texto do PDF
       const linhas = todoTexto.split('\n');
       const produtosExtraidos: Produto[] = [];
 
       linhas.forEach((linha, index) => {
         console.log(`Analisando linha ${index}:`, linha);
         
-        // Adapte este regex de acordo com o formato do seu PDF
-        const match = linha.match(/([0-9]+)\s+(.+?)\s+(\d+)/);
-        if (match) {
+        // Regex atualizado para capturar o formato específico
+        // Procura por padrões como "FORMATO: 40 118,000" e "GRAMATURA: 45" seguido por um número de lote
+        const formatoMatch = linha.match(/FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)/);
+        const gramaturaMatch = linha.match(/GRAMATURA:\s*(\d+)/);
+        const loteMatch = linha.match(/(\d{15})/); // 15 dígitos para o lote
+
+        if (formatoMatch && gramaturaMatch && loteMatch) {
           const produto = {
-            codigo: match[1],
-            nome: match[2],
-            quantidade: parseInt(match[3]),
+            codigo: '', // Será preenchido pelo código de barras
+            nome: `F:${formatoMatch[1]} G:${gramaturaMatch[1]} P:${formatoMatch[2]}`,
+            formato: formatoMatch[1],
+            gramatura: gramaturaMatch[1],
+            peso: formatoMatch[2],
+            lote: loteMatch[1],
             conferido: false
           };
           console.log('Produto encontrado:', produto);
@@ -107,14 +117,14 @@ const ConferenciaPage = () => {
       );
 
       scanner.render((decodedText) => {
-        // Procurar o produto na lista
-        const produto = produtos.find(p => p.codigo === decodedText);
+        // Procurar o produto na lista pelo código de barras (que deve ser o lote)
+        const produto = produtos.find(p => p.lote === decodedText);
         
         if (produto) {
           setProdutos(prev => 
             prev.map(p => 
-              p.codigo === decodedText 
-                ? { ...p, conferido: true, quantidade: p.quantidade } 
+              p.lote === decodedText 
+                ? { ...p, conferido: true } 
                 : p
             )
           );
@@ -122,10 +132,13 @@ const ConferenciaPage = () => {
           setProdutosNaoListados(prev => [
             ...prev,
             {
-              codigo: decodedText,
+              codigo: '',
               nome: 'Produto não identificado',
-              conferido: true,
-              quantidade: 1
+              formato: '',
+              gramatura: '',
+              peso: '',
+              lote: decodedText,
+              conferido: true
             }
           ]);
         }
@@ -180,10 +193,10 @@ const ConferenciaPage = () => {
               </Typography>
               <List>
                 {produtos.map((produto) => (
-                  <ListItem key={produto.codigo}>
+                  <ListItem key={produto.lote}>
                     <ListItemText
                       primary={produto.nome}
-                      secondary={`Código: ${produto.codigo} - Quantidade: ${produto.quantidade}`}
+                      secondary={`Lote: ${produto.lote}`}
                       sx={{
                         color: produto.conferido ? 'success.main' : 'text.primary',
                       }}
@@ -191,6 +204,11 @@ const ConferenciaPage = () => {
                   </ListItem>
                 ))}
               </List>
+              <Box sx={{ mt: 2, borderTop: 1, pt: 2, borderColor: 'divider' }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Total de Peso: {produtos.reduce((acc, curr) => acc + parseFloat(curr.peso.replace(',', '.')), 0).toLocaleString('pt-BR')} KG
+                </Typography>
+              </Box>
             </Paper>
 
             {produtosNaoListados.length > 0 && (
@@ -200,10 +218,10 @@ const ConferenciaPage = () => {
                 </Typography>
                 <List>
                   {produtosNaoListados.map((produto) => (
-                    <ListItem key={produto.codigo}>
+                    <ListItem key={produto.lote}>
                       <ListItemText
                         primary={produto.nome}
-                        secondary={`Código: ${produto.codigo} - Quantidade: ${produto.quantidade}`}
+                        secondary={`Lote: ${produto.lote}`}
                         sx={{ color: 'error.main' }}
                       />
                     </ListItem>
@@ -227,7 +245,6 @@ const ConferenciaPage = () => {
                 variant="contained"
                 color="success"
                 onClick={() => {
-                  // Salvar resultados no localStorage
                   localStorage.setItem('resultadoConferencia', JSON.stringify({
                     produtos,
                     produtosNaoListados,
