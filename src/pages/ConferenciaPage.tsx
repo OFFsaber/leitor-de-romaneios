@@ -3,10 +3,9 @@ import { Box, Button, Container, Typography, Paper, List, ListItem, ListItemText
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
-import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.entry';
 
 // Configuração do worker do PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Produto {
   codigo: string;
@@ -50,15 +49,28 @@ const ConferenciaPage = () => {
       linhas.forEach((linha, index) => {
         console.log(`Analisando linha ${index}:`, linha);
         
-        // Regex atualizado para capturar o formato específico
-        // Procura por padrões como "FORMATO: 40 118,000" e "GRAMATURA: 45" seguido por um número de lote
+        // Regex atualizado para capturar o formato específico do romaneio
         const formatoMatch = linha.match(/FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)/);
         const gramaturaMatch = linha.match(/GRAMATURA:\s*(\d+)/);
-        const loteMatch = linha.match(/(\d{15})/); // 15 dígitos para o lote
+        const loteMatch = linha.match(/(\d{15})/);
+        const totalMatch = linha.match(/TOTAL\s+([A-Z\s]+)\s+(\d+[,.]?\d*)/);
 
-        if (formatoMatch && gramaturaMatch && loteMatch) {
+        if (totalMatch) {
           const produto = {
-            codigo: '', // Será preenchido pelo código de barras
+            codigo: '',
+            nome: `${totalMatch[1]} - ${totalMatch[2]} KG`,
+            formato: '',
+            gramatura: '',
+            peso: totalMatch[2],
+            lote: '',
+            conferido: false
+          };
+          console.log('Total encontrado:', produto);
+          produtosExtraidos.push(produto);
+        }
+        else if (formatoMatch && gramaturaMatch && loteMatch) {
+          const produto = {
+            codigo: '',
             nome: `F:${formatoMatch[1]} G:${gramaturaMatch[1]} P:${formatoMatch[2]}`,
             formato: formatoMatch[1],
             gramatura: gramaturaMatch[1],
