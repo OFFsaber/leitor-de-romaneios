@@ -23,7 +23,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
+    assetsDir: '',
     sourcemap: true,
     rollupOptions: {
       input: {
@@ -39,9 +39,9 @@ export default defineConfig({
             return 'vendor'
           }
         },
-        entryFileNames: `assets/[name].js`,
-        chunkFileNames: `assets/[name].js`,
-        assetFileNames: `assets/[name].[ext]`
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name].[ext]'
       }
     },
     chunkSizeWarningLimit: 2000
