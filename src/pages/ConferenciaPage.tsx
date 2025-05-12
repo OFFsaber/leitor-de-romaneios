@@ -204,11 +204,11 @@ const ConferenciaPage = () => {
                 Produtos do Romaneio
               </Typography>
               <List>
-                {produtos.map((produto) => (
-                  <ListItem key={produto.lote}>
+                {produtos.filter(p => !p.nome.includes('TOTAL')).map((produto) => (
+                  <ListItem key={produto.lote || produto.nome}>
                     <ListItemText
                       primary={produto.nome}
-                      secondary={`Lote: ${produto.lote}`}
+                      secondary={produto.lote ? `Lote: ${produto.lote}` : ''}
                       sx={{
                         color: produto.conferido ? 'success.main' : 'text.primary',
                       }}
@@ -216,11 +216,25 @@ const ConferenciaPage = () => {
                   </ListItem>
                 ))}
               </List>
-              <Box sx={{ mt: 2, borderTop: 1, pt: 2, borderColor: 'divider' }}>
-                <Typography variant="subtitle1" gutterBottom>
-                  Total de Peso: {produtos.reduce((acc, curr) => acc + parseFloat(curr.peso.replace(',', '.')), 0).toLocaleString('pt-BR')} KG
-                </Typography>
-              </Box>
+            </Paper>
+
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Totais
+              </Typography>
+              <List>
+                {produtos.filter(p => p.nome.includes('TOTAL')).map((produto) => (
+                  <ListItem key={produto.nome}>
+                    <ListItemText
+                      primary={produto.nome}
+                      sx={{
+                        fontWeight: 'bold',
+                        color: 'primary.main'
+                      }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
             </Paper>
 
             {produtosNaoListados.length > 0 && (
