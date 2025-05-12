@@ -5,7 +5,7 @@ import { resolve } from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: '/leitor-de-romaneios/',
   optimizeDeps: {
     include: ['pdfjs-dist/legacy/build/pdf']
   },
@@ -25,6 +25,8 @@ export default defineConfig({
           pdfjs: ['pdfjs-dist']
         }
       }
-    }
+    },
+    sourcemap: true,
+    chunkSizeWarningLimit: 2000
   }
 }) 

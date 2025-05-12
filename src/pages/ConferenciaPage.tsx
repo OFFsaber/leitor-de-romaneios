@@ -57,7 +57,14 @@ const ConferenciaPage = () => {
 
       linhas.forEach((linha) => {
         // Procura pelo cabeçalho do produto (ex: 00063 - JUMBO STRONG BRANCO II KG 752,000)
-        const cabecalhoMatch = linha.match(/(\d{5}\s*-\s*[^KG]+)\s*KG\s*(\d+[,.]?\d*)/);
+        const cabecalhoMatch = linha.match(/(\d{5}\s*-\s*[^KG]+)KG\s*(\d+[,.]?\d*)/);
+        
+        // Procura por linhas que começam com GRAMATURA
+        const gramaturaMatch = linha.match(/^GRAMATURA:\s*(\d+)\s*\/\s*FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})/);
+        
+        // Procura por linhas que começam com FORMATO
+        const formatoMatch = linha.match(/^FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})\s+GRAMATURA:\s*(\d+)/);
+
         if (cabecalhoMatch) {
           produtoAtual = cabecalhoMatch[1].trim();
           pesoTotal = cabecalhoMatch[2];
@@ -71,18 +78,27 @@ const ConferenciaPage = () => {
           }
         }
 
-        // Procura por linhas de lote
-        const loteMatch = linha.match(/FORMATO:\s*(\d+)\s+(\d+[,.]?\d*)\s+(\d{15})\s+GRAMATURA:\s*(\d+)/);
-        if (loteMatch && produtoAtual) {
+        // Adiciona lote tanto para linhas que começam com GRAMATURA quanto FORMATO
+        if (produtoAtual) {
           const produto = produtosMap.get(produtoAtual);
           if (produto) {
-            produto.lotes.push({
-              formato: loteMatch[1],
-              peso: loteMatch[2],
-              lote: loteMatch[3],
-              gramatura: loteMatch[4],
-              conferido: false
-            });
+            if (gramaturaMatch) {
+              produto.lotes.push({
+                gramatura: gramaturaMatch[1],
+                formato: gramaturaMatch[2],
+                peso: gramaturaMatch[3],
+                lote: gramaturaMatch[4],
+                conferido: false
+              });
+            } else if (formatoMatch) {
+              produto.lotes.push({
+                formato: formatoMatch[1],
+                peso: formatoMatch[2],
+                lote: formatoMatch[3],
+                gramatura: formatoMatch[4],
+                conferido: false
+              });
+            }
           }
         }
       });
