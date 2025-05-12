@@ -3,13 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://offsaber.github.io/leitor-de-romaneios",
+  "homepage": ".",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist -t true"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "^11.11.0",
