@@ -39,6 +39,7 @@ const ConferenciaPage = () => {
       
       let todoTexto = '';
       
+      // Extrair todo o texto do PDF
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
@@ -46,60 +47,100 @@ const ConferenciaPage = () => {
         todoTexto += textosPagina.join(' ');
       }
 
-      console.log('Texto extraído do PDF:', todoTexto);
-      
-      // Objeto para agrupar produtos
-      const produtosMap = new Map<string, Produto>();
+      console.log('Texto extraído:', todoTexto);
 
-      // Procurar os totais primeiro
-      const totalStrongMatch = todoTexto.match(/TOTAL\s*STRONG\s*BRANCO[^0-9]*(\d+(?:,\d+)?)/i);
-      const totalKraftMatch = todoTexto.match(/TOTAL\s*KRAFT\s*MIX[^0-9]*(\d+(?:,\d+)?)/i);
+      const produtosProcessados = new Map<string, Produto>();
 
-      if (totalStrongMatch) {
-        produtosMap.set("JUMBO STRONG BRANCO II", {
+      // Procurar por cada produto individualmente
+      const produtosAlvo = [
+        {
           codigo: '00063',
-          nome: "JUMBO STRONG BRANCO II",
-          pesoTotal: totalStrongMatch[1],
-          lotes: []
-        });
-      }
-
-      if (totalKraftMatch) {
-        produtosMap.set("KRAFT MIX", {
+          nome: 'JUMBO STRONG BRANCO II',
+          gramaturaEsperada: '45'
+        },
+        {
           codigo: '00237',
-          nome: "KRAFT MIX",
-          pesoTotal: totalKraftMatch[1],
-          lotes: []
-        });
-      }
+          nome: 'KRAFT MIX',
+          gramaturaEsperada: '38'
+        }
+      ];
 
-      // Encontrar todos os lotes usando uma expressão regular mais precisa
-      const lotesRegex = /GRAMATURA:\s*(\d+)\s*\/\s*FORMATO:\s*(\d+)\s+(\d+(?:,\d+)?)\s+(\d{15})/g;
-      let match;
+      for (const produtoInfo of produtosAlvo) {
+        // Procurar pelo código ou nome do produto
+        if (todoTexto.includes(produtoInfo.codigo) || todoTexto.includes(produtoInfo.nome)) {
+          console.log(`Encontrado produto: ${produtoInfo.nome}`);
 
-      while ((match = lotesRegex.exec(todoTexto)) !== null) {
-        const [, gramatura, formato, peso, lote] = match;
-        console.log('Lote encontrado:', { gramatura, formato, peso, lote });
+          // Procurar pelo peso total
+          let pesoTotal = '0';
+          const regexPesoTotal = new RegExp(`${produtoInfo.nome}[^0-9]*(\\d+(?:[.,]\\d+)?)`);
+          const matchPesoTotal = todoTexto.match(regexPesoTotal);
+          if (matchPesoTotal) {
+            pesoTotal = matchPesoTotal[1];
+            console.log(`Peso total encontrado para ${produtoInfo.nome}: ${pesoTotal}`);
+          }
 
-        // Adicionar ao produto correspondente
-        for (const [nomeProduto, produto] of produtosMap.entries()) {
-          produto.lotes.push({
-            gramatura,
-            formato,
-            peso,
-            lote,
-            conferido: false
-          });
+          // Criar produto
+          const produto: Produto = {
+            codigo: produtoInfo.codigo,
+            nome: produtoInfo.nome,
+            pesoTotal: pesoTotal,
+            lotes: []
+          };
+
+          // Procurar por todos os padrões possíveis de lote
+          const padroes = [
+            // Padrão específico para o formato do seu PDF
+            /GRAMATURA:\s*(\d+)\s*\/\s*FORMATO:\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d{10,15})/g
+          ];
+
+          for (const padrao of padroes) {
+            let match;
+            while ((match = padrao.exec(todoTexto)) !== null) {
+              try {
+                const [, gramaturaRaw, formatoRaw, pesoRaw, loteRaw] = match;
+                
+                // Garantir que todos os valores existem e fazer trim com segurança
+                const gramatura = (gramaturaRaw || '').toString().trim();
+                const formato = (formatoRaw || '').toString().trim();
+                const peso = (pesoRaw || '').toString().trim();
+                const lote = (loteRaw || '').toString().trim();
+
+                // Verificar se os valores são válidos antes de adicionar
+                if (gramatura && formato && peso && lote) {
+                  console.log(`Lote encontrado para ${produtoInfo.nome}:`, { gramatura, formato, peso, lote });
+
+                  // Verificar se a gramatura corresponde ao produto
+                  if (gramatura === produtoInfo.gramaturaEsperada) {
+                    produto.lotes.push({
+                      gramatura,
+                      formato,
+                      peso,
+                      lote,
+                      conferido: false
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('Erro ao processar lote:', error);
+                continue; // Continuar para o próximo lote em caso de erro
+              }
+            }
+          }
+
+          if (produto.lotes.length > 0) {
+            produtosProcessados.set(produtoInfo.nome, produto);
+            console.log(`Produto ${produtoInfo.nome} adicionado com ${produto.lotes.length} lotes`);
+          }
         }
       }
 
-      if (produtosMap.size === 0) {
-        throw new Error('Nenhum produto encontrado no PDF. Verifique o formato do arquivo.');
+      if (produtosProcessados.size === 0) {
+        throw new Error('Nenhum produto encontrado no PDF. Verifique se o arquivo está correto.');
       }
 
-      const produtos = Array.from(produtosMap.values());
-      console.log('Produtos processados:', produtos);
-      setProdutos(produtos);
+      const produtosFinais = Array.from(produtosProcessados.values());
+      console.log('Produtos processados:', produtosFinais);
+      setProdutos(produtosFinais);
       setRomaneioCarregado(true);
       setError(null);
     } catch (err) {
