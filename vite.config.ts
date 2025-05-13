@@ -23,6 +23,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    assetsDir: 'assets',
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
@@ -46,9 +47,9 @@ export default defineConfig({
             'html5-qrcode'
           ]
         },
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]'
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     },
     chunkSizeWarningLimit: 2000
