@@ -23,7 +23,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: '',
+    emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
       input: {
@@ -34,10 +34,17 @@ export default defineConfig({
         globals: {
           jspdf: 'jspdf'
         },
-        manualChunks: (id) => {
-          if (id.includes('node_modules')) {
-            return 'vendor'
-          }
+        manualChunks: {
+          'vendor': [
+            'react',
+            'react-dom',
+            'react-router-dom',
+            '@mui/material',
+            '@emotion/react',
+            '@emotion/styled',
+            'pdfjs-dist',
+            'html5-qrcode'
+          ]
         },
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',

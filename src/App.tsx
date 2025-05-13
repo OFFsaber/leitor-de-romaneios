@@ -21,7 +21,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router basename="/">
+      <Router>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/conferencia" element={<ConferenciaPage />} />
